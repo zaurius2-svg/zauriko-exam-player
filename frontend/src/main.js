@@ -1,256 +1,17 @@
-import JSZip from "jszip";
+import { t, applyLanguage, getCurrentLang } from "./i18n.js";
+import { 
+    state, 
+    saveActiveSession, 
+    clearActiveSession, 
+    loadSavedSession, 
+    saveHistoryEntry 
+} from "./state.js";
+import { parseDocxOnClient } from "./docxParser.js";
+import { initTimer, startTimer, stopTimer, updateTimerDisplay } from "./timer.js";
+import { buildQuestionGrid, updateGridStyles, showExplanationBox } from "./ui/renderer.js";
+import { renderHistoryTable } from "./ui/modals.js";
 
-// ==================== СЛОВАРЬ ЛОКАЛИЗАЦИИ ====================
-const translations = {
-    ru: {
-        importDocx: "Импорт DOCX",
-        openJson: "Открыть JSON",
-        sim60: "🎯 Симуляция (60)",
-        historyBtn: "📊 История",
-        practiceMode: "Practice Mode (мгновенный ответ)",
-        fileNotSelected: "Файл не выбран",
-        timerLeft: "Осталось:",
-        questionsList: "Список вопросов",
-        legendAnswered: "Отвечен",
-        legendReview: "Review",
-        addImage: "📷 Добавить картинку",
-        btnMarkReviewOn: "★ Отложен (Review)",
-        btnMarkReviewOff: "☆ Отложить (Review)",
-        btnPrev: "Назад (←)",
-        btnNext: "Вперед (→)",
-        btnShowAns: "Показать ответ (Space)",
-        btnSubmit: "Завершить экзамен",
-        examPassed: "ЭКЗАМЕН СДАН (PASS)!",
-        examFailed: "ЭКЗАМЕН НЕ СДАН (FAIL)",
-        retryMistakes: "🔥 Тренировка по ошибкам",
-        reviewErrors: "Обзор ошибок",
-        btnClose: "Закрыть",
-        historyTitle: "История экзаменационных попыток",
-        clearHistory: "Очистить историю",
-        historyEmpty: "История пуста. Пройдите симуляцию для фиксации результатов.",
-        colDateTime: "Дата и время",
-        colMode: "Режим",
-        colResult: "Результат",
-        colScore: "Балл",
-        colCorrect: "Верно",
-        hotkeyHint: "<small>Горячие клавиши:<br>• <b>1..6</b> или <b>A..F</b> — выбор ответа<br>• <b>← / →</b> — навигация<br>• <b>F</b> — Review (флаг)<br>• <b>Space</b> — показать ответ</small>",
-        confirmSimStart: "Начать симуляцию реального экзамена?\n\n• 60 случайных вопросов\n• Варианты ответов перемешаны\n• Время: 70 минут\n• Подсказки отключены",
-        confirmFinish: "Вы ответили на {answered} из {total} вопросов.\nОтложено (Review): {marked}.\n\nЗавершить экзамен и сдать результаты?",
-        confirmClearHistory: "Очистить журнал всех попыток?",
-        resumePrompt: "Найдена сохраненная сессия («{title}»).\nПродолжить тестирование?",
-        qCounterText: "Вопрос {cur} ({idx} из {total})",
-        qSingleChoice: "Single Choice",
-        qMultipleChoice: "Multiple Choice (Выберите {n})",
-        ansCorrect: "✔ ВЕРНО",
-        ansWrong: "✖ ОШИБКА (Ваш ответ: {ans})",
-        labelCorrectAnswer: "Правильный ответ:",
-        labelExplanation: "Пояснение:",
-        noExplanation: "Объяснение отсутствует.",
-        noUserAns: "Нет ответа",
-        maxOptionsAlert: "Для этого вопроса нужно выбрать ровно {n} варианта!",
-        fullBaseTitle: "Полная база",
-        simTitle: "Экзамен (60 вопросов)",
-        mistakesTitle: "Тренировка по ошибкам"
-    },
-    en: {
-        importDocx: "Import DOCX",
-        openJson: "Open JSON",
-        sim60: "🎯 Simulation (60)",
-        historyBtn: "📊 History",
-        practiceMode: "Practice Mode (instant answer)",
-        fileNotSelected: "No file selected",
-        timerLeft: "Time left:",
-        questionsList: "Questions List",
-        legendAnswered: "Answered",
-        legendReview: "Review",
-        addImage: "📷 Add Image",
-        btnMarkReviewOn: "★ Marked (Review)",
-        btnMarkReviewOff: "☆ Mark (Review)",
-        btnPrev: "Back (←)",
-        btnNext: "Next (→)",
-        btnShowAns: "Show Answer (Space)",
-        btnSubmit: "Submit Exam",
-        examPassed: "EXAM PASSED (PASS)!",
-        examFailed: "EXAM FAILED (FAIL)",
-        retryMistakes: "🔥 Practice Mistakes",
-        reviewErrors: "Review Errors",
-        btnClose: "Close",
-        historyTitle: "Exam Attempt History",
-        clearHistory: "Clear History",
-        historyEmpty: "History is empty. Complete a simulation to log results.",
-        colDateTime: "Date & Time",
-        colMode: "Mode",
-        colResult: "Result",
-        colScore: "Score",
-        colCorrect: "Correct",
-        hotkeyHint: "<small>Hotkeys:<br>• <b>1..6</b> or <b>A..F</b> — select choice<br>• <b>← / →</b> — navigation<br>• <b>F</b> — Review (flag)<br>• <b>Space</b> — show answer</small>",
-        confirmSimStart: "Start realistic exam simulation?\n\n• 60 random questions\n• Shuffled answer options\n• Time limit: 70 minutes\n• Instant hints disabled",
-        confirmFinish: "You have answered {answered} of {total} questions.\nMarked (Review): {marked}.\n\nAre you sure you want to finish the exam?",
-        confirmClearHistory: "Clear all attempt records?",
-        resumePrompt: "Unfinished saved session found («{title}»).\nDo you want to resume it?",
-        qCounterText: "Question {cur} ({idx} of {total})",
-        qSingleChoice: "Single Choice",
-        qMultipleChoice: "Multiple Choice (Choose {n})",
-        ansCorrect: "✔ CORRECT",
-        ansWrong: "✖ INCORRECT (Your answer: {ans})",
-        labelCorrectAnswer: "Correct Answer:",
-        labelExplanation: "Explanation:",
-        noExplanation: "No explanation provided.",
-        noUserAns: "No answer",
-        maxOptionsAlert: "You must choose exactly {n} options for this question!",
-        fullBaseTitle: "Full Pool",
-        simTitle: "Exam (60 questions)",
-        mistakesTitle: "Mistakes Practice"
-    },
-    az: {
-        importDocx: "DOCX İdxal et",
-        openJson: "JSON Aç",
-        sim60: "🎯 Simulyasiya (60)",
-        historyBtn: "📊 Tarixçə",
-        practiceMode: "Məşq rejimi (ani cavab)",
-        fileNotSelected: "Fayl seçilməyib",
-        timerLeft: "Qalan vaxt:",
-        questionsList: "Sual siyahısı",
-        legendAnswered: "Cavablanıb",
-        legendReview: "Review",
-        addImage: "📷 Şəkil əlavə et",
-        btnMarkReviewOn: "★ Saxlanılıb (Review)",
-        btnMarkReviewOff: "☆ Saxla (Review)",
-        btnPrev: "Geri (←)",
-        btnNext: "İrəli (→)",
-        btnShowAns: "Cavabı göstər (Space)",
-        btnSubmit: "İmtahanı bitir",
-        examPassed: "İMTAHANDAN KEÇDİNİZ (PASS)!",
-        examFailed: "İMTAHANDAN KƏSİLDİNİZ (FAIL)",
-        retryMistakes: "🔥 Səhvlər üzərində iş",
-        reviewErrors: "Səhvlərə baxış",
-        btnClose: "Bağla",
-        historyTitle: "İmtahan cəhdləri tarixçəsi",
-        clearHistory: "Tarixçəni təmizlə",
-        historyEmpty: "Tarixçə boşdur. Nəticələrin qeydə alınması üçün simulyasiyanı tamamlayın.",
-        colDateTime: "Tarix və vaxt",
-        colMode: "Rejim",
-        colResult: "Nəticə",
-        colScore: "Bal",
-        colCorrect: "Düzgün",
-        hotkeyHint: "<small>Qaynar düymələr:<br>• <b>1..6</b> və ya <b>A..F</b> — variantı seç<br>• <b>← / →</b> — keçid<br>• <b>F</b> — Review (bayraq)<br>• <b>Space</b> — cavabı göstər</small>",
-        confirmSimStart: "Real imtahan simulyasiyasına başlansın?\n\n• 60 təsadüfi sual\n• Qarışdırılmış cavab variantları\n• Vaxt: 70 dəqiqə\n• İpucları deaktivdir",
-        confirmFinish: "{total} sualdan {answered} cavablandırdınız.\nSaxlanılan (Review): {marked}.\n\nİmtahanı bitirib nəticəni təsdiqləmək istəyirsiniz?",
-        confirmClearHistory: "Bütün imtahan tarixçəsi silinsin?",
-        resumePrompt: "Yarımçıq saxlanılmış sessiya tapıldı («{title}»).\nTesti davam etdirmək istəyirsiniz?",
-        qCounterText: "Sual {cur} ({idx} / {total})",
-        qSingleChoice: "Tək seçim (Single Choice)",
-        qMultipleChoice: "Çoxlu seçim ({n} variant seçin)",
-        ansCorrect: "✔ DOĞRU",
-        ansWrong: "✖ YANLIŞ (Sizin cavab: {ans})",
-        labelCorrectAnswer: "Doğru cavab:",
-        labelExplanation: "İzah:",
-        noExplanation: "İzah qeyd edilməyib.",
-        noUserAns: "Cavab verilməyib",
-        maxOptionsAlert: "Bu sual üçün yalnız {n} variant seçməlisiniz!",
-        fullBaseTitle: "Tam baza",
-        simTitle: "İmtahan (60 sual)",
-        mistakesTitle: "Səhvlərin məşqi"
-    },
-    uk: {
-        importDocx: "Імпорт DOCX",
-        openJson: "Відкрити JSON",
-        sim60: "🎯 Симуляція (60)",
-        historyBtn: "📊 Історія",
-        practiceMode: "Practice Mode (миттєва відповідь)",
-        fileNotSelected: "Файл не вибрано",
-        timerLeft: "Залишилось:",
-        questionsList: "Список питань",
-        legendAnswered: "Відповіли",
-        legendReview: "Review",
-        addImage: "📷 Додати зображення",
-        btnMarkReviewOn: "★ Відкладено (Review)",
-        btnMarkReviewOff: "☆ Відкласти (Review)",
-        btnPrev: "Назад (←)",
-        btnNext: "Вперед (→)",
-        btnShowAns: "Показати відповідь (Space)",
-        btnSubmit: "Завершити іспит",
-        examPassed: "ІСПИТ СКЛАДЕНО (PASS)!",
-        examFailed: "ІСПИТ НЕ СКЛАДЕНО (FAIL)",
-        retryMistakes: "🔥 Тренування за помилками",
-        reviewErrors: "Огляд помилок",
-        btnClose: "Закрити",
-        historyTitle: "Історія спроб складання",
-        clearHistory: "Очистити історію",
-        historyEmpty: "Історія порожня. Пройдіть симуляцію для фіксації результатів.",
-        colDateTime: "Дата і час",
-        colMode: "Режим",
-        colResult: "Результат",
-        colScore: "Бал",
-        colCorrect: "Вірно",
-        hotkeyHint: "<small>Гарячі клавіші:<br>• <b>1..6</b> або <b>A..F</b> — вибір варіанта<br>• <b>← / →</b> — навігація<br>• <b>F</b> — Review (прапорець)<br>• <b>Space</b> — показати відповідь</small>",
-        confirmSimStart: "Розпочати симуляцію реального іспиту?\n\n• 60 випадкових питань\n• Варіанти відповідей перемішані\n• Час: 70 хвилин\n• Підказки вимкнено",
-        confirmFinish: "Ви відповіли на {answered} з {total} питань.\nВідкладено (Review): {marked}.\n\nЗавершити іспит і перевірити результат?",
-        confirmClearHistory: "Очистити журнал усіх спроб?",
-        resumePrompt: "Знайдено збережену незавершену сесію («{title}»).\nПродовжити тестування?",
-        qCounterText: "Питання {cur} ({idx} з {total})",
-        qSingleChoice: "Single Choice",
-        qMultipleChoice: "Multiple Choice (Оберіть {n})",
-        ansCorrect: "✔ ВІРНО",
-        ansWrong: "✖ ПОМИЛКА (Ваша відповідь: {ans})",
-        labelCorrectAnswer: "Правильна відповідь:",
-        labelExplanation: "Пояснення:",
-        noExplanation: "Пояснення відсутнє.",
-        noUserAns: "Немає відповіді",
-        maxOptionsAlert: "Для цього питання потрібно обрати рівно {n} варіанти!",
-        fullBaseTitle: "Повна база",
-        simTitle: "Іспит (60 питань)",
-        mistakesTitle: "Тренування за помилками"
-    }
-};
-
-let currentLang = localStorage.getItem("zauriko_exam_lang") || "ru";
-
-function t(key, vars = {}) {
-    let str = (translations[currentLang] && translations[currentLang][key]) || translations["ru"][key] || key;
-    for (const v in vars) {
-        str = str.replace(new RegExp(`\\{${v}\\}`, 'g'), vars[v]);
-    }
-    return str;
-}
-
-function applyLanguage(lang) {
-    currentLang = lang;
-    localStorage.setItem("zauriko_exam_lang", lang);
-
-    document.querySelectorAll("[data-i18n]").forEach(el => {
-        const key = el.getAttribute("data-i18n");
-        if (key && translations[lang][key]) {
-            el.innerText = translations[lang][key];
-        }
-    });
-
-    const hotkeyHint = document.getElementById("hotkey-hint");
-    if (hotkeyHint) hotkeyHint.innerHTML = t("hotkeyHint");
-
-    if (currentExam) {
-        renderQuestion();
-    }
-}
-
-// ==================== СОСТОЯНИЕ ====================
-let fullExamSource = null;
-let currentExam = null;
-let currentIndex = 0;
-let userAnswers = {};
-let markedQuestions = new Set();
-
-let timerInterval = null;
-let remainingSeconds = 0;
-let isExamFinished = false;
-let isSimulationMode = false;
-let isPracticeMode = false;
-let examResultData = null;
-
-const STORAGE_SESSION_KEY = "zauriko_exam_active_session";
-const STORAGE_HISTORY_KEY = "zauriko_exam_history_logs";
-
-// Элементы UI
+// ==================== UI ЭЛЕМЕНТЫ ====================
 const selectLang = document.getElementById("select-lang");
 const btnImportDocx = document.getElementById("btn-import-docx");
 const mobileDocxInput = document.getElementById("mobile-docx-input");
@@ -301,16 +62,33 @@ const historyTableContainer = document.getElementById("history-table-container")
 const btnCloseHistory = document.getElementById("btn-close-history");
 const btnClearHistory = document.getElementById("btn-clear-history");
 
+// Предупреждение при попытке закрыть окно во время незавершенного теста
+window.addEventListener("beforeunload", (e) => {
+    if (state.currentExam && !state.isExamFinished) {
+        saveActiveSession(examTitle.innerText);
+        e.preventDefault();
+        e.returnValue = "";
+    }
+});
+
+// Инициализация таймера
+initTimer(timerDisplay, timerWrapper, handleTimeExpired);
+
+// Локализация
 if (selectLang) {
-    selectLang.value = currentLang;
+    selectLang.value = getCurrentLang();
     selectLang.addEventListener("change", (e) => {
-        applyLanguage(e.target.value);
+        applyLanguage(e.target.value, () => {
+            if (state.currentExam) renderQuestion();
+        });
     });
 }
 
 window.addEventListener("DOMContentLoaded", () => {
     try {
-        applyLanguage(currentLang);
+        applyLanguage(getCurrentLang(), () => {
+            if (state.currentExam) renderQuestion();
+        });
     } catch (e) {
         console.error("Language init error:", e);
     }
@@ -322,56 +100,33 @@ window.addEventListener("DOMContentLoaded", () => {
 
 function checkSavedSession() {
     try {
-        const saved = localStorage.getItem(STORAGE_SESSION_KEY);
-        if (!saved) return;
-        const session = JSON.parse(saved);
-        if (session && session.currentExam && session.currentExam.questions.length > 0) {
-            if (confirm(t("resumePrompt", { title: session.displayTitle }))) {
-                fullExamSource = session.fullExamSource;
-                currentExam = session.currentExam;
-                currentIndex = session.currentIndex || 0;
-                userAnswers = session.userAnswers || {};
-                markedQuestions = new Set(session.markedQuestions || []);
-                remainingSeconds = session.remainingSeconds || 0;
-                isSimulationMode = session.isSimulationMode || false;
-                isPracticeMode = session.isPracticeMode || false;
+        const session = loadSavedSession();
+        if (!session || !session.currentExam || !session.currentExam.questions.length) return;
 
-                chkPracticeMode.checked = isPracticeMode;
-                btnStartExam60.style.display = "inline-block";
-                modeSwitchWrapper.style.display = "inline-block";
+        if (confirm(t("resumePrompt", { title: session.displayTitle }))) {
+            state.fullExamSource = session.fullExamSource;
+            state.currentExam = session.currentExam;
+            state.currentIndex = session.currentIndex || 0;
+            state.userAnswers = session.userAnswers || {};
+            state.markedQuestions = new Set(session.markedQuestions || []);
+            state.remainingSeconds = session.remainingSeconds || 0;
+            state.isSimulationMode = session.isSimulationMode || false;
+            state.isPracticeMode = session.isPracticeMode || false;
 
-                restoreExamUI(session.displayTitle);
-            } else {
-                localStorage.removeItem(STORAGE_SESSION_KEY);
+            chkPracticeMode.checked = state.isPracticeMode;
+            btnStartExam60.style.display = "inline-block";
+            modeSwitchWrapper.style.display = "inline-block";
+
+            restoreExamUI(session.displayTitle);
+            if (state.remainingSeconds > 0) {
+                startTimer(state.remainingSeconds, () => examTitle.innerText);
             }
+        } else {
+            clearActiveSession();
         }
     } catch (e) {
         console.error("Session restore error:", e);
     }
-}
-
-function saveActiveSession() {
-    if (!currentExam || isExamFinished) return;
-    try {
-        const session = {
-            fullExamSource,
-            currentExam,
-            currentIndex,
-            userAnswers,
-            markedQuestions: Array.from(markedQuestions),
-            remainingSeconds,
-            isSimulationMode,
-            isPracticeMode,
-            displayTitle: examTitle.innerText
-        };
-        localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(session));
-    } catch (e) {
-        console.error("Session save error:", e);
-    }
-}
-
-function clearActiveSession() {
-    localStorage.removeItem(STORAGE_SESSION_KEY);
 }
 
 // ==================== ИМПОРТ DOCX ====================
@@ -384,7 +139,7 @@ if (btnImportDocx) {
                 const exam = await window.go.main.App.SelectAndImportDOCX();
                 if (!exam) return;
 
-                fullExamSource = JSON.parse(JSON.stringify(exam));
+                state.fullExamSource = JSON.parse(JSON.stringify(exam));
                 btnStartExam60.style.display = "inline-block";
                 modeSwitchWrapper.style.display = "inline-block";
                 setupExamSession(exam, `${exam.exam_title} (${t("fullBaseTitle")})`, false);
@@ -412,7 +167,7 @@ if (mobileDocxInput) {
                 alert("Не удалось извлечь вопросы из выбранного DOCX файла.");
                 return;
             }
-            fullExamSource = JSON.parse(JSON.stringify(exam));
+            state.fullExamSource = JSON.parse(JSON.stringify(exam));
             btnStartExam60.style.display = "inline-block";
             modeSwitchWrapper.style.display = "inline-block";
             setupExamSession(exam, `${exam.exam_title} (${t("fullBaseTitle")})`, false);
@@ -425,248 +180,6 @@ if (mobileDocxInput) {
     });
 }
 
-// ==================== МОЩНЫЙ КЛИЕНТСКИЙ ПАРСЕР DOCX С СОХРАНЕНИЕМ ПРОБЕЛОВ ====================
-async function parseDocxOnClient(file) {
-    const zip = await JSZip.loadAsync(file);
-    const docXmlFile = zip.file("word/document.xml");
-    if (!docXmlFile) throw new Error("Неверный формат DOCX: отсутствует word/document.xml");
-
-    const xmlText = await docXmlFile.async("text");
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlText, "application/xml");
-
-    // 1. Извлекаем медиа-файлы (изображения)
-    const imagesMap = {};
-    const relsFile = zip.file("word/_rels/document.xml.rels");
-    if (relsFile) {
-        try {
-            const relsText = await relsFile.async("text");
-            const relsDoc = parser.parseFromString(relsText, "application/xml");
-            const relationships = relsDoc.getElementsByTagName("Relationship");
-            for (let rel of relationships) {
-                const rId = rel.getAttribute("Id");
-                const target = rel.getAttribute("Target");
-                if (target && target.startsWith("media/")) {
-                    const imgZipEntry = zip.file(`word/${target}`);
-                    if (imgZipEntry) {
-                        const base64 = await imgZipEntry.async("base64");
-                        const ext = target.split('.').pop().toLowerCase();
-                        const mime = ext === "png" ? "image/png" : "image/jpeg";
-                        imagesMap[rId] = `data:${mime};base64,${base64}`;
-                    }
-                }
-            }
-        } catch (e) {
-            console.warn("Media rels error:", e);
-        }
-    }
-
-    // 2. Извлекаем параграфы с ГАРАНТИРОВАННЫМ сохранением пробелов
-    const pNodes = xmlDoc.getElementsByTagName("w:p");
-    const paragraphs = [];
-
-    for (let p of pNodes) {
-        let pText = "";
-        
-        // В Word внутри <w:p> идут блоки <w:r> (runs)
-        const runs = p.querySelectorAll("w\\:r, r");
-        
-        if (runs.length > 0) {
-            for (let r of runs) {
-                let runText = "";
-                // Читаем текст внутри <w:t>
-                const tNodes = r.querySelectorAll("w\\:t, t");
-                for (let t of tNodes) {
-                    runText += t.textContent;
-                }
-                
-                // Табуляции и разрывы строк
-                if (r.querySelector("w\\:tab, tab")) runText += " ";
-                if (r.querySelector("w\\:br, br")) runText += "\n";
-
-                // Если предыдущий текст не кончался пробелом и новый не начинается,
-                // но они в разных <w:r>, разделяем пробелом при необходимости
-                if (pText.length > 0 && runText.length > 0) {
-                    const lastChar = pText[pText.length - 1];
-                    const firstChar = runText[0];
-                    if (!/\s/.test(lastChar) && !/\s/.test(firstChar)) {
-                        // Если это склеенные слова, вставляем разделитель
-                        pText += " ";
-                    }
-                }
-                pText += runText;
-            }
-        } else {
-            // Запасной вариант, если runs не сработал
-            const allT = p.querySelectorAll("w\\:t, t");
-            for (let t of allT) {
-                pText += (pText && !pText.endsWith(" ") ? " " : "") + t.textContent;
-            }
-        }
-
-        // Проверяем, является ли параграф пунктом списка Word
-        const hasNumPr = p.getElementsByTagName("w:numPr").length > 0 || p.getElementsByTagName("numPr").length > 0;
-
-        // Поиск встроенных изображений
-        const embeddedImages = [];
-        const blips = p.querySelectorAll("a\\:blip, blip");
-        for (let blip of blips) {
-            const embedId = blip.getAttribute("r:embed");
-            if (embedId && imagesMap[embedId]) {
-                embeddedImages.push(imagesMap[embedId]);
-            }
-        }
-
-        // Нормализуем неразрывные пробелы и множественные пробелы внутри строки
-        pText = pText.replace(/[\u00A0\u1680\u180e\u2000-\u200a\u202f\u205f\u3000]/g, " ")
-                     .replace(/[ \t]+/g, " ")
-                     .trim();
-
-        if (pText || embeddedImages.length > 0) {
-            paragraphs.push({ text: pText, images: embeddedImages, isListItem: hasNumPr });
-        }
-    }
-
-    // 3. Структурный разбор вопросов по блокам
-    const rawQuestions = [];
-    let curBlock = null;
-
-    for (let item of paragraphs) {
-        const text = item.text;
-
-        // Поиск маркера начала вопроса (QUESTION 1, ВОПРОС 1)
-        const qMatch = text.match(/^(?:QUESTION|ВОПРОС|Вопрос)\s*(\d+)[:.]?\s*(.*)/i);
-        if (qMatch) {
-            if (curBlock) rawQuestions.push(curBlock);
-            curBlock = {
-                number: parseInt(qMatch[1], 10),
-                rawLines: [],
-                images: [...item.images]
-            };
-            if (qMatch[2] && qMatch[2].trim()) {
-                curBlock.rawLines.push({ text: qMatch[2].trim(), isListItem: item.isListItem });
-            }
-            continue;
-        }
-
-        if (!curBlock) continue;
-
-        if (item.images.length > 0) {
-            curBlock.images.push(...item.images);
-        }
-
-        if (text) {
-            curBlock.rawLines.push({ text: text, isListItem: item.isListItem });
-        }
-    }
-
-    if (curBlock) rawQuestions.push(curBlock);
-
-    // 4. Построение объектов вопросов с отделением вариантов
-    const questions = [];
-    const alphabet = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-
-    rawQuestions.forEach((block, bIdx) => {
-        let correctAnswers = [];
-        let explanation = "";
-        let inExplanation = false;
-
-        const preLines = [];
-
-        // Шаг А: Извлечение Correct Answer и Explanation
-        for (let lineObj of block.rawLines) {
-            const line = lineObj.text;
-
-            // Поиск правильного ответа (например "Correct Answer: D" или "CorrectAnswer:D")
-            const ansMatch = line.match(/(?:Correct\s*Answer|Ответ|Правильный\s*ответ)[:\s]*([A-F,\s]+)/i);
-            if (ansMatch) {
-                const rawAns = ansMatch[1].toUpperCase();
-                correctAnswers = rawAns.match(/[A-F]/g) || [];
-                continue;
-            }
-
-            const expMatch = line.match(/(?:Explanation|Пояснение|Объяснение)[:\s]*(.*)/i);
-            if (expMatch) {
-                inExplanation = true;
-                explanation = expMatch[1] ? expMatch[1].trim() : "";
-                continue;
-            }
-
-            if (inExplanation) {
-                explanation += (explanation ? "\n" : "") + line;
-                continue;
-            }
-
-            preLines.push(lineObj);
-        }
-
-        // Шаг Б: Распознавание вариантов ответов
-        const options = [];
-        let questionTextLines = [];
-
-        // Проверяем, есть ли явные буквы A., B., C., D.
-        const hasExplicitLetters = preLines.some(l => /^(?:[\u2022\-\*]\s*)?\[?([A-F])\]?[\.\):\-]\s+/i.test(l.text));
-
-        if (hasExplicitLetters) {
-            for (let lineObj of preLines) {
-                const line = lineObj.text;
-                const optMatch = line.match(/^(?:[\u2022\-\*]\s*)?\[?([A-F])\]?[\.\):\-]\s*(.*)/i);
-                if (optMatch) {
-                    options.push({
-                        key: optMatch[1].toUpperCase(),
-                        text: optMatch[2].trim(),
-                        image: ""
-                    });
-                } else if (options.length > 0) {
-                    options[options.length - 1].text += " " + line;
-                } else {
-                    questionTextLines.push(line);
-                }
-            }
-        } else {
-            // Если явных букв нет: варианты идут перед Correct Answer
-            // Определяем количество вариантов (обычно 4 или по максимальной букве правильного ответа)
-            const expectedCount = (correctAnswers.length > 0) 
-                ? Math.max(...correctAnswers.map(c => alphabet.indexOf(c) + 1), 4) 
-                : 4;
-
-            if (preLines.length > expectedCount) {
-                const qLines = preLines.slice(0, preLines.length - expectedCount);
-                const optLines = preLines.slice(preLines.length - expectedCount);
-
-                questionTextLines = qLines.map(l => l.text);
-                optLines.forEach((l, idx) => {
-                    options.push({
-                        key: alphabet[idx] || String(idx + 1),
-                        text: l.text,
-                        image: ""
-                    });
-                });
-            } else {
-                questionTextLines = preLines.map(l => l.text);
-            }
-        }
-
-        questions.push({
-            number: block.number || (bIdx + 1),
-            question_text: questionTextLines.join("\n\n"),
-            options: options,
-            correct_answers: correctAnswers,
-            explanation: explanation,
-            images: block.images,
-            type: (correctAnswers.length > 1) ? "multiple_choice" : "single_choice"
-        });
-    });
-
-    return {
-        exam_title: file.name.replace(/\.[^/.]+$/, ""),
-        total_questions: questions.length,
-        passing_score_percentage: 70.0,
-        time_limit_minutes: Math.max(questions.length * 2, 60),
-        questions: questions
-    };
-}
-
 // ==================== ОТКРЫТИЕ JSON ====================
 if (btnLoadJson) {
     btnLoadJson.addEventListener("click", async () => {
@@ -674,7 +187,7 @@ if (btnLoadJson) {
             try {
                 const exam = await window.go.main.App.LoadExistingJSON();
                 if (!exam) return;
-                fullExamSource = JSON.parse(JSON.stringify(exam));
+                state.fullExamSource = JSON.parse(JSON.stringify(exam));
                 btnStartExam60.style.display = "inline-block";
                 modeSwitchWrapper.style.display = "inline-block";
                 setupExamSession(exam, `${exam.exam_title} (${t("fullBaseTitle")})`, false);
@@ -695,7 +208,7 @@ if (mobileFileInput) {
         reader.onload = (event) => {
             try {
                 const exam = JSON.parse(event.target.result);
-                fullExamSource = JSON.parse(JSON.stringify(exam));
+                state.fullExamSource = JSON.parse(JSON.stringify(exam));
                 btnStartExam60.style.display = "inline-block";
                 modeSwitchWrapper.style.display = "inline-block";
                 setupExamSession(exam, `${exam.exam_title || file.name} (${t("fullBaseTitle")})`, false);
@@ -708,15 +221,15 @@ if (mobileFileInput) {
 }
 
 chkPracticeMode.addEventListener("change", () => {
-    isPracticeMode = chkPracticeMode.checked;
-    saveActiveSession();
+    state.isPracticeMode = chkPracticeMode.checked;
+    saveActiveSession(examTitle.innerText);
     renderQuestion();
 });
 
 // ==================== СИМУЛЯЦИЯ ====================
 if (btnStartExam60) {
     btnStartExam60.addEventListener("click", () => {
-        if (!fullExamSource || !fullExamSource.questions.length) return;
+        if (!state.fullExamSource || !state.fullExamSource.questions.length) return;
         if (confirm(t("confirmSimStart"))) {
             startSimulationMode();
         }
@@ -759,11 +272,11 @@ function shuffleOptionsForQuestion(q) {
 }
 
 function startSimulationMode() {
-    isSimulationMode = true;
-    isPracticeMode = false;
+    state.isSimulationMode = true;
+    state.isPracticeMode = false;
     chkPracticeMode.checked = false;
 
-    const pool = JSON.parse(JSON.stringify(fullExamSource.questions));
+    const pool = JSON.parse(JSON.stringify(state.fullExamSource.questions));
     for (let i = pool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -773,9 +286,9 @@ function startSimulationMode() {
     const examQuestions = pool.slice(0, selectedCount).map(q => shuffleOptionsForQuestion(q));
 
     const simulationExam = {
-        exam_title: `${fullExamSource.exam_title} [SIMULATION]`,
+        exam_title: `${state.fullExamSource.exam_title} [SIMULATION]`,
         total_questions: selectedCount,
-        passing_score_percentage: fullExamSource.passing_score_percentage || 70.0,
+        passing_score_percentage: state.fullExamSource.passing_score_percentage || 70.0,
         time_limit_minutes: 70,
         questions: examQuestions
     };
@@ -784,7 +297,7 @@ function startSimulationMode() {
 }
 
 function startMistakesPractice(mistakeQuestionNumbers) {
-    const mistakeQuestions = fullExamSource.questions.filter(q => mistakeQuestionNumbers.includes(q.number));
+    const mistakeQuestions = state.fullExamSource.questions.filter(q => mistakeQuestionNumbers.includes(q.number));
 
     const mistakesExam = {
         exam_title: `${t("mistakesTitle")} (${mistakeQuestions.length})`,
@@ -794,41 +307,40 @@ function startMistakesPractice(mistakeQuestionNumbers) {
         questions: JSON.parse(JSON.stringify(mistakeQuestions))
     };
 
-    isPracticeMode = true;
+    state.isPracticeMode = true;
     chkPracticeMode.checked = true;
     setupExamSession(mistakesExam, t("mistakesTitle"), false);
 }
 
 function setupExamSession(exam, displayTitle, isSimMode) {
-    currentExam = exam;
-    currentIndex = 0;
-    userAnswers = {};
-    markedQuestions.clear();
-    isExamFinished = false;
-    isSimulationMode = isSimMode;
-    examResultData = null;
+    state.currentExam = exam;
+    state.currentIndex = 0;
+    state.userAnswers = {};
+    state.markedQuestions.clear();
+    state.isExamFinished = false;
+    state.isSimulationMode = isSimMode;
+    state.examResultData = null;
 
     if (window.go && window.go.main && window.go.main.App) {
-        window.go.main.App.SaveUpdatedExam(currentExam);
+        window.go.main.App.SaveUpdatedExam(state.currentExam);
     }
 
     restoreExamUI(displayTitle);
 
-    const totalMinutes = currentExam.time_limit_minutes > 0 
-        ? currentExam.time_limit_minutes 
-        : currentExam.total_questions * 2;
-    startTimer(totalMinutes * 60);
+    const totalMinutes = state.currentExam.time_limit_minutes > 0 
+        ? state.currentExam.time_limit_minutes 
+        : state.currentExam.total_questions * 2;
+    startTimer(totalMinutes * 60, () => examTitle.innerText);
 
-    saveActiveSession();
+    saveActiveSession(displayTitle);
 }
 
 function restoreExamUI(displayTitle) {
     resultModal.style.display = "none";
     examTitle.innerText = displayTitle;
-    totalStat.innerText = currentExam.total_questions;
-    answeredStat.innerText = Object.keys(userAnswers).filter(k => userAnswers[k].length > 0).length;
+    totalStat.innerText = state.currentExam.total_questions;
+    answeredStat.innerText = Object.keys(state.userAnswers).filter(k => state.userAnswers[k].length > 0).length;
 
-    // На мобильных скрываем сайдбар по умолчанию, чтобы не загораживать вопрос
     if (window.innerWidth <= 768) {
         sidebar.style.display = "none";
     } else {
@@ -839,125 +351,36 @@ function restoreExamUI(displayTitle) {
     quizArea.style.display = "block";
     footerControls.style.display = "flex";
 
-    qModeBadge.style.display = isSimulationMode ? "inline-block" : "none";
-    btnShowAns.style.display = isSimulationMode ? "none" : "inline-block";
+    qModeBadge.style.display = state.isSimulationMode ? "inline-block" : "none";
+    btnShowAns.style.display = state.isSimulationMode ? "none" : "inline-block";
 
-    buildQuestionGrid();
+    buildQuestionGrid({
+        gridElement: questionGrid,
+        sidebarElement: sidebar,
+        onQuestionSelect: () => {
+            renderQuestion();
+            saveActiveSession(examTitle.innerText);
+        }
+    });
     renderQuestion();
 }
 
-function startTimer(seconds) {
-    if (timerInterval) clearInterval(timerInterval);
-
-    remainingSeconds = seconds;
-    timerWrapper.style.display = "flex";
-    timerWrapper.classList.remove("warning", "critical");
-
-    updateTimerDisplay();
-
-    timerInterval = setInterval(() => {
-        if (remainingSeconds <= 0) {
-            clearInterval(timerInterval);
-            handleTimeExpired();
-            return;
-        }
-
-        remainingSeconds--;
-        updateTimerDisplay();
-
-        if (remainingSeconds <= 300) {
-            timerWrapper.classList.add("critical");
-            timerWrapper.classList.remove("warning");
-        } else if (remainingSeconds <= 600) {
-            timerWrapper.classList.add("warning");
-            timerWrapper.classList.remove("critical");
-        } else {
-            timerWrapper.classList.remove("warning", "critical");
-        }
-
-        if (remainingSeconds % 15 === 0) {
-            saveActiveSession();
-        }
-    }, 1000);
-}
-
-function updateTimerDisplay() {
-    const hours = Math.floor(remainingSeconds / 3600);
-    const minutes = Math.floor((remainingSeconds % 3600) / 60);
-    const seconds = remainingSeconds % 60;
-    const pad = (n) => String(n).padStart(2, "0");
-    timerDisplay.innerText = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-}
-
 async function handleTimeExpired() {
-    if (isExamFinished) return;
+    if (state.isExamFinished) return;
     alert("TIME EXPIRED!");
     await submitAndShowReport();
 }
 
-function buildQuestionGrid() {
-    questionGrid.innerHTML = "";
-    if (!currentExam) return;
-
-    currentExam.questions.forEach((q, idx) => {
-        const item = document.createElement("button");
-        item.className = "grid-item";
-        item.id = `grid-btn-${idx}`;
-        item.innerText = isSimulationMode ? (idx + 1) : q.number;
-
-        item.onclick = () => {
-            currentIndex = idx;
-            renderQuestion();
-            saveActiveSession();
-            if (window.innerWidth <= 768) {
-                sidebar.style.display = "none";
-            }
-        };
-
-        questionGrid.appendChild(item);
-    });
-}
-
-function updateGridStyles() {
-    if (!currentExam) return;
-
-    let answeredCount = 0;
-
-    currentExam.questions.forEach((q, idx) => {
-        const item = document.getElementById(`grid-btn-${idx}`);
-        if (!item) return;
-
-        const isAnswered = userAnswers[q.number] && userAnswers[q.number].length > 0;
-        if (isAnswered) answeredCount++;
-
-        const isMarked = markedQuestions.has(q.number);
-
-        item.classList.toggle("answered", isAnswered);
-        item.classList.toggle("marked", isMarked);
-        item.classList.toggle("active", idx === currentIndex);
-
-        if (examResultData && examResultData.details) {
-            const detail = examResultData.details.find(d => d.number === q.number);
-            if (detail) {
-                item.classList.toggle("result-correct", detail.is_correct);
-                item.classList.toggle("result-incorrect", !detail.is_correct);
-            }
-        }
-    });
-
-    answeredStat.innerText = answeredCount;
-}
-
 function renderQuestion() {
-    if (!currentExam || !currentExam.questions.length) return;
+    if (!state.currentExam || !state.currentExam.questions.length) return;
 
-    const q = currentExam.questions[currentIndex];
-    const displayNum = isSimulationMode ? (currentIndex + 1) : q.number;
+    const q = state.currentExam.questions[state.currentIndex];
+    const displayNum = state.isSimulationMode ? (state.currentIndex + 1) : q.number;
     
     qCounter.innerText = t("qCounterText", {
         cur: displayNum,
-        idx: currentIndex + 1,
-        total: currentExam.total_questions
+        idx: state.currentIndex + 1,
+        total: state.currentExam.total_questions
     });
 
     const expectedCount = q.correct_answers ? q.correct_answers.length : 1;
@@ -982,7 +405,7 @@ function renderQuestion() {
             img.className = "exam-image";
             img.onclick = () => img.classList.toggle("zoomed");
 
-            if (!isSimulationMode) {
+            if (!state.isSimulationMode) {
                 const delBtn = document.createElement("button");
                 delBtn.innerText = "✕";
                 delBtn.style.position = "absolute";
@@ -1001,7 +424,7 @@ function renderQuestion() {
                     q.images.splice(imgIdx, 1);
                     renderQuestion();
                     if (window.go && window.go.main && window.go.main.App) {
-                        await window.go.main.App.SaveUpdatedExam(currentExam);
+                        await window.go.main.App.SaveUpdatedExam(state.currentExam);
                     }
                 };
                 imgWrapper.appendChild(delBtn);
@@ -1014,7 +437,7 @@ function renderQuestion() {
         imagesContainer.style.display = "none";
     }
 
-    const isMarked = markedQuestions.has(q.number);
+    const isMarked = state.markedQuestions.has(q.number);
     btnMarkReview.classList.toggle("active", isMarked);
     btnMarkReview.innerText = isMarked ? t("btnMarkReviewOn") : t("btnMarkReviewOff");
 
@@ -1022,12 +445,12 @@ function renderQuestion() {
     expBox.style.display = "none";
     expBox.innerHTML = "";
 
-    const selectedKeys = userAnswers[q.number] || [];
+    const selectedKeys = state.userAnswers[q.number] || [];
     const isMultiple = expectedCount > 1 || q.type === "multiple_choice";
     const inputType = isMultiple ? "checkbox" : "radio";
     const optionsList = q.options || [];
 
-    const isAnsweredInPractice = isPracticeMode && selectedKeys.length > 0;
+    const isAnsweredInPractice = state.isPracticeMode && selectedKeys.length > 0;
 
     optionsList.forEach(opt => {
         const row = document.createElement("label");
@@ -1050,7 +473,7 @@ function renderQuestion() {
         input.name = "option-choice";
         input.value = opt.key;
         input.checked = selectedKeys.includes(opt.key);
-        input.disabled = isExamFinished;
+        input.disabled = state.isExamFinished;
 
         input.onchange = () => {
             selectOption(opt.key, isMultiple, expectedCount);
@@ -1086,70 +509,48 @@ function renderQuestion() {
         optionsContainer.appendChild(row);
     });
 
-    btnPrev.disabled = currentIndex === 0;
-    btnNext.disabled = currentIndex === currentExam.questions.length - 1;
+    btnPrev.disabled = state.currentIndex === 0;
+    btnNext.disabled = state.currentIndex === state.currentExam.questions.length - 1;
 
-    if (isExamFinished || (isPracticeMode && selectedKeys.length > 0)) {
-        showExplanationBox();
+    if (state.isExamFinished || (state.isPracticeMode && selectedKeys.length > 0)) {
+        showExplanationBox(expBox);
     }
 
-    updateGridStyles();
+    updateGridStyles({ answeredStatElement: answeredStat });
 }
 
 function selectOption(key, isMultiple, expectedCount) {
-    if (isExamFinished || !currentExam) return;
-    const q = currentExam.questions[currentIndex];
+    if (state.isExamFinished || !state.currentExam) return;
+    const q = state.currentExam.questions[state.currentIndex];
 
     if (!isMultiple) {
-        userAnswers[q.number] = [key];
+        state.userAnswers[q.number] = [key];
     } else {
-        if (!userAnswers[q.number]) userAnswers[q.number] = [];
+        if (!state.userAnswers[q.number]) state.userAnswers[q.number] = [];
 
-        const idx = userAnswers[q.number].indexOf(key);
+        const idx = state.userAnswers[q.number].indexOf(key);
         if (idx > -1) {
-            userAnswers[q.number].splice(idx, 1);
+            state.userAnswers[q.number].splice(idx, 1);
         } else {
-            if (expectedCount > 1 && userAnswers[q.number].length >= expectedCount) {
+            if (expectedCount > 1 && state.userAnswers[q.number].length >= expectedCount) {
                 alert(t("maxOptionsAlert", { n: expectedCount }));
                 renderQuestion();
                 return;
             }
-            userAnswers[q.number].push(key);
+            state.userAnswers[q.number].push(key);
         }
     }
-    saveActiveSession();
+    // Сохраняем немедленно при выборе любого ответа
+    saveActiveSession(examTitle.innerText);
     renderQuestion();
-}
-
-function showExplanationBox() {
-    if (!currentExam) return;
-    const q = currentExam.questions[currentIndex];
-    const answersText = q.correct_answers && q.correct_answers.length > 0 
-        ? q.correct_answers.join(", ") 
-        : "N/A";
-
-    const userAns = userAnswers[q.number] ? userAnswers[q.number].join(", ") : t("noUserAns");
-    const isCorrect = userAnswers[q.number] && 
-        userAnswers[q.number].slice().sort().join() === (q.correct_answers || []).slice().sort().join();
-
-    const statusBadge = isCorrect 
-        ? `<span style="color: #a6e3a1; font-weight: bold;">${t("ansCorrect")}</span>` 
-        : `<span style="color: #f38ba8; font-weight: bold;">${t("ansWrong", { ans: userAns })}</span>`;
-
-    expBox.innerHTML = `
-        <div style="margin-bottom: 8px;">${statusBadge}</div>
-        <strong>${t("labelCorrectAnswer")}</strong> <span style="color: #a6e3a1; font-size: 1.1rem; font-weight: bold;">${answersText}</span><br><br>
-        <strong>${t("labelExplanation")}</strong><br>${q.explanation || t("noExplanation")}
-    `;
-    expBox.style.display = "block";
 }
 
 // Горячие клавиши
 window.addEventListener("keydown", (e) => {
     if (e.target.tagName === "INPUT" && e.target.type === "text") return;
-    if (!currentExam || !currentExam.questions.length) return;
+    if (!state.currentExam || !state.currentExam.questions.length) return;
 
-    const q = currentExam.questions[currentIndex];
+    const q = state.currentExam.questions[state.currentIndex];
     const expectedCount = q.correct_answers ? q.correct_answers.length : 1;
     const isMultiple = expectedCount > 1 || q.type === "multiple_choice";
 
@@ -1172,19 +573,19 @@ window.addEventListener("keydown", (e) => {
     }
 
     if (e.code === "ArrowLeft") {
-        if (currentIndex > 0) {
-            currentIndex--;
+        if (state.currentIndex > 0) {
+            state.currentIndex--;
             renderQuestion();
-            saveActiveSession();
+            saveActiveSession(examTitle.innerText);
         }
         return;
     }
 
     if (e.code === "ArrowRight") {
-        if (currentIndex < currentExam.questions.length - 1) {
-            currentIndex++;
+        if (state.currentIndex < state.currentExam.questions.length - 1) {
+            state.currentIndex++;
             renderQuestion();
-            saveActiveSession();
+            saveActiveSession(examTitle.innerText);
         }
         return;
     }
@@ -1194,52 +595,52 @@ window.addEventListener("keydown", (e) => {
         return;
     }
 
-    if (e.code === "Space" && !isSimulationMode) {
+    if (e.code === "Space" && !state.isSimulationMode) {
         e.preventDefault();
-        showExplanationBox();
+        showExplanationBox(expBox);
         return;
     }
 });
 
 function toggleReviewFlag() {
-    if (!currentExam || isExamFinished) return;
-    const q = currentExam.questions[currentIndex];
+    if (!state.currentExam || state.isExamFinished) return;
+    const q = state.currentExam.questions[state.currentIndex];
 
-    if (markedQuestions.has(q.number)) {
-        markedQuestions.delete(q.number);
+    if (state.markedQuestions.has(q.number)) {
+        state.markedQuestions.delete(q.number);
     } else {
-        markedQuestions.add(q.number);
+        state.markedQuestions.add(q.number);
     }
-    saveActiveSession();
+    saveActiveSession(examTitle.innerText);
     renderQuestion();
 }
 
 btnMarkReview.addEventListener("click", toggleReviewFlag);
 
 btnPrev.addEventListener("click", () => {
-    if (currentIndex > 0) {
-        currentIndex--;
+    if (state.currentIndex > 0) {
+        state.currentIndex--;
         renderQuestion();
-        saveActiveSession();
+        saveActiveSession(examTitle.innerText);
     }
 });
 
 btnNext.addEventListener("click", () => {
-    if (currentIndex < currentExam.questions.length - 1) {
-        currentIndex++;
+    if (state.currentIndex < state.currentExam.questions.length - 1) {
+        state.currentIndex++;
         renderQuestion();
-        saveActiveSession();
+        saveActiveSession(examTitle.innerText);
     }
 });
 
-btnShowAns.addEventListener("click", showExplanationBox);
+btnShowAns.addEventListener("click", () => showExplanationBox(expBox));
 
 btnSubmit.addEventListener("click", async () => {
-    if (isExamFinished) return;
+    if (state.isExamFinished) return;
 
-    const total = currentExam ? currentExam.total_questions : 0;
-    const answered = Object.keys(userAnswers).filter(k => userAnswers[k].length > 0).length;
-    const marked = markedQuestions.size;
+    const total = state.currentExam ? state.currentExam.total_questions : 0;
+    const answered = Object.keys(state.userAnswers).filter(k => state.userAnswers[k].length > 0).length;
+    const marked = state.markedQuestions.size;
 
     const confirmMsg = t("confirmFinish", {
         answered: answered,
@@ -1253,15 +654,15 @@ btnSubmit.addEventListener("click", async () => {
 });
 
 async function submitAndShowReport() {
-    isExamFinished = true;
-    if (timerInterval) clearInterval(timerInterval);
+    state.isExamFinished = true;
+    stopTimer();
     clearActiveSession();
 
     let res = null;
 
     if (window.go && window.go.main && window.go.main.App) {
         try {
-            res = await window.go.main.App.SubmitExam({ answers: userAnswers });
+            res = await window.go.main.App.SubmitExam({ answers: state.userAnswers });
         } catch (err) {
             console.error("Wails submit error, fallback to local:", err);
         }
@@ -1269,8 +670,8 @@ async function submitAndShowReport() {
 
     if (!res) {
         let correctCount = 0;
-        const details = currentExam.questions.map(q => {
-            const userAns = (userAnswers[q.number] || []).slice().sort().join();
+        const details = state.currentExam.questions.map(q => {
+            const userAns = (state.userAnswers[q.number] || []).slice().sort().join();
             const correctAns = (q.correct_answers || []).slice().sort().join();
             const isCorrect = userAns.length > 0 && userAns === correctAns;
             if (isCorrect) correctCount++;
@@ -1280,9 +681,9 @@ async function submitAndShowReport() {
             };
         });
 
-        const totalQ = currentExam.total_questions || currentExam.questions.length;
+        const totalQ = state.currentExam.total_questions || state.currentExam.questions.length;
         const scorePct = totalQ > 0 ? (correctCount / totalQ) * 100 : 0;
-        const passingScore = currentExam.passing_score_percentage || 70.0;
+        const passingScore = state.currentExam.passing_score_percentage || 70.0;
 
         res = {
             total_questions: totalQ,
@@ -1293,7 +694,7 @@ async function submitAndShowReport() {
         };
     }
 
-    examResultData = res;
+    state.examResultData = res;
 
     modalStatusTitle.innerText = res.is_passed ? t("examPassed") : t("examFailed");
     modalStatusTitle.className = res.is_passed ? "status-pass" : "status-fail";
@@ -1325,23 +726,12 @@ async function submitAndShowReport() {
 
     resultModal.style.display = "flex";
     btnShowAns.style.display = "inline-block";
-    updateGridStyles();
+    updateGridStyles({ answeredStatElement: answeredStat });
     renderQuestion();
 }
 
-function saveHistoryEntry(entry) {
-    try {
-        let history = JSON.parse(localStorage.getItem(STORAGE_HISTORY_KEY) || "[]");
-        history.unshift(entry);
-        if (history.length > 30) history = history.slice(0, 30);
-        localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(history));
-    } catch (e) {
-        console.error("History save error:", e);
-    }
-}
-
 btnHistory.addEventListener("click", () => {
-    renderHistoryModal();
+    renderHistoryTable(historyTableContainer);
     historyModal.style.display = "flex";
 });
 
@@ -1351,49 +741,10 @@ btnCloseHistory.addEventListener("click", () => {
 
 btnClearHistory.addEventListener("click", () => {
     if (confirm(t("confirmClearHistory"))) {
-        localStorage.removeItem(STORAGE_HISTORY_KEY);
-        renderHistoryModal();
+        localStorage.removeItem("zauriko_exam_history_logs");
+        renderHistoryTable(historyTableContainer);
     }
 });
-
-function renderHistoryModal() {
-    const history = JSON.parse(localStorage.getItem(STORAGE_HISTORY_KEY) || "[]");
-    if (history.length === 0) {
-        historyTableContainer.innerHTML = `<p style="color: #a6adc8; margin: 20px 0;">${t("historyEmpty")}</p>`;
-        return;
-    }
-
-    let html = `
-        <table class="history-table">
-            <thead>
-                <tr>
-                    <th>${t("colDateTime")}</th>
-                    <th>${t("colMode")}</th>
-                    <th>${t("colResult")}</th>
-                    <th>${t("colScore")}</th>
-                    <th>${t("colCorrect")}</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-
-    history.forEach(item => {
-        const badgeClass = item.isPassed ? "badge-pass" : "badge-fail";
-        const badgeText = item.isPassed ? "PASS" : "FAIL";
-        html += `
-            <tr>
-                <td>${item.date}</td>
-                <td>${item.title}</td>
-                <td class="${badgeClass}">${badgeText}</td>
-                <td><b>${item.scorePct}%</b></td>
-                <td>${item.correct} / ${item.total}</td>
-            </tr>
-        `;
-    });
-
-    html += `</tbody></table>`;
-    historyTableContainer.innerHTML = html;
-}
 
 modalBtnClose.addEventListener("click", () => {
     resultModal.style.display = "none";
@@ -1401,23 +752,23 @@ modalBtnClose.addEventListener("click", () => {
 
 modalBtnReviewErrors.addEventListener("click", () => {
     resultModal.style.display = "none";
-    if (!examResultData || !examResultData.details) return;
+    if (!state.examResultData || !state.examResultData.details) return;
 
-    const firstFailIndex = currentExam.questions.findIndex(q => {
-        const d = examResultData.details.find(x => x.number === q.number);
+    const firstFailIndex = state.currentExam.questions.findIndex(q => {
+        const d = state.examResultData.details.find(x => x.number === q.number);
         return d && !d.is_correct;
     });
 
     if (firstFailIndex !== -1) {
-        currentIndex = firstFailIndex;
+        state.currentIndex = firstFailIndex;
         renderQuestion();
     }
 });
 
 if (btnAddImage) {
     btnAddImage.addEventListener("click", () => {
-        if (!currentExam) return;
-        const q = currentExam.questions[currentIndex];
+        if (!state.currentExam) return;
+        const q = state.currentExam.questions[state.currentIndex];
 
         const fileInput = document.createElement("input");
         fileInput.type = "file";
@@ -1432,7 +783,7 @@ if (btnAddImage) {
                 q.images.push(event.target.result);
                 renderQuestion();
                 if (window.go && window.go.main && window.go.main.App) {
-                    await window.go.main.App.SaveUpdatedExam(currentExam);
+                    await window.go.main.App.SaveUpdatedExam(state.currentExam);
                 }
             };
             reader.readAsDataURL(file);
