@@ -4,12 +4,15 @@ import {
     saveActiveSession, 
     clearActiveSession, 
     loadSavedSession, 
-    saveHistoryEntry 
+    saveHistoryEntry,
+    loadUserNotes,
+    saveQuestionNote,
+    getQuestionNote
 } from "./state.js";
 import { parseDocxOnClient } from "./docxParser.js";
 import { initTimer, startTimer, stopTimer, updateTimerDisplay } from "./timer.js";
 import { buildQuestionGrid, updateGridStyles, showExplanationBox } from "./ui/renderer.js";
-import { renderHistoryTable } from "./ui/modals.js";
+import { renderHistoryTable, generateExamReportHTML } from "./ui/modals.js";
 
 // ==================== UI ЭЛЕМЕНТЫ ====================
 const selectLang = document.getElementById("select-lang");
@@ -17,6 +20,7 @@ const btnImportDocx = document.getElementById("btn-import-docx");
 const mobileDocxInput = document.getElementById("mobile-docx-input");
 const btnLoadJson = document.getElementById("btn-load-json");
 const mobileFileInput = document.getElementById("mobile-file-input");
+const btnExportJson = document.getElementById("btn-export-json");
 const btnStartExam60 = document.getElementById("btn-start-exam-60");
 const btnHistory = document.getElementById("btn-history");
 const chkPracticeMode = document.getElementById("chk-practice-mode");
@@ -30,6 +34,8 @@ const timerWrapper = document.getElementById("timer-wrapper");
 const timerDisplay = document.getElementById("timer-display");
 
 const sidebar = document.getElementById("sidebar");
+const questionSearchInput = document.getElementById("question-search-input");
+const filterChips = document.querySelectorAll(".filter-chip");
 const questionGrid = document.getElementById("question-grid");
 const quizArea = document.getElementById("quiz-area");
 const footerControls = document.getElementById("footer-controls");
@@ -41,6 +47,9 @@ const qText = document.getElementById("q-text");
 const imagesContainer = document.getElementById("images-container");
 const optionsContainer = document.getElementById("options-container");
 const expBox = document.getElementById("explanation-box");
+const btnToggleNote = document.getElementById("btn-toggle-note");
+const noteBox = document.getElementById("note-box");
+const noteTextarea = document.getElementById("note-textarea");
 const btnAddImage = document.getElementById("btn-add-image");
 const btnMarkReview = document.getElementById("btn-mark-review");
 
@@ -56,13 +65,17 @@ const modalScoreDetails = document.getElementById("modal-score-details");
 const modalBtnClose = document.getElementById("modal-btn-close");
 const modalBtnReviewErrors = document.getElementById("modal-btn-review-errors");
 const modalBtnRetryMistakes = document.getElementById("modal-btn-retry-mistakes");
+const modalBtnExportReport = document.getElementById("modal-btn-export-report");
 
 const historyModal = document.getElementById("history-modal");
 const historyTableContainer = document.getElementById("history-table-container");
 const btnCloseHistory = document.getElementById("btn-close-history");
 const btnClearHistory = document.getElementById("btn-clear-history");
 
-// Предупреждение при попытке закрыть окно во время незавершенного теста
+// Инициализация заметок
+loadUserNotes();
+
+// Предупреждение при закрытии
 window.addEventListener("beforeunload", (e) => {
     if (state.currentExam && !state.isExamFinished) {
         saveActiveSession(examTitle.innerText);
@@ -98,6 +111,56 @@ window.addEventListener("DOMContentLoaded", () => {
     }, 200);
 });
 
+// Поиск и фильтры в сайдбаре
+if (questionSearchInput) {
+    questionSearchInput.addEventListener("input", (e) => {
+        state.searchQuery = e.target.value;
+        buildQuestionGrid({
+            gridElement: questionGrid,
+            sidebarElement: sidebar,
+            onQuestionSelect: () => {
+                renderQuestion();
+                saveActiveSession(examTitle.innerText);
+            }
+        });
+    });
+}
+
+filterChips.forEach(chip => {
+    chip.addEventListener("click", () => {
+        filterChips.forEach(c => c.classList.remove("active"));
+        chip.classList.add("active");
+        state.activeFilter = chip.getAttribute("data-filter") || "all";
+        buildQuestionGrid({
+            gridElement: questionGrid,
+            sidebarElement: sidebar,
+            onQuestionSelect: () => {
+                renderQuestion();
+                saveActiveSession(examTitle.innerText);
+            }
+        });
+    });
+});
+
+// Заметки к вопросам
+if (btnToggleNote) {
+    btnToggleNote.addEventListener("click", () => {
+        noteBox.style.display = noteBox.style.display === "none" ? "block" : "none";
+        if (noteBox.style.display === "block") {
+            noteTextarea.focus();
+        }
+    });
+}
+
+if (noteTextarea) {
+    noteTextarea.addEventListener("input", (e) => {
+        if (!state.currentExam) return;
+        const q = state.currentExam.questions[state.currentIndex];
+        saveQuestionNote(q.number, e.target.value);
+        updateGridStyles({ answeredStatElement: answeredStat });
+    });
+}
+
 function checkSavedSession() {
     try {
         const session = loadSavedSession();
@@ -115,6 +178,7 @@ function checkSavedSession() {
 
             chkPracticeMode.checked = state.isPracticeMode;
             btnStartExam60.style.display = "inline-block";
+            btnExportJson.style.display = "inline-block";
             modeSwitchWrapper.style.display = "inline-block";
 
             restoreExamUI(session.displayTitle);
@@ -141,6 +205,7 @@ if (btnImportDocx) {
 
                 state.fullExamSource = JSON.parse(JSON.stringify(exam));
                 btnStartExam60.style.display = "inline-block";
+                btnExportJson.style.display = "inline-block";
                 modeSwitchWrapper.style.display = "inline-block";
                 setupExamSession(exam, `${exam.exam_title} (${t("fullBaseTitle")})`, false);
             } catch (err) {
@@ -169,6 +234,7 @@ if (mobileDocxInput) {
             }
             state.fullExamSource = JSON.parse(JSON.stringify(exam));
             btnStartExam60.style.display = "inline-block";
+            btnExportJson.style.display = "inline-block";
             modeSwitchWrapper.style.display = "inline-block";
             setupExamSession(exam, `${exam.exam_title} (${t("fullBaseTitle")})`, false);
         } catch (err) {
@@ -180,7 +246,7 @@ if (mobileDocxInput) {
     });
 }
 
-// ==================== ОТКРЫТИЕ JSON ====================
+// ==================== ОТКРЫТИЕ И ЭКСПОРТ JSON ====================
 if (btnLoadJson) {
     btnLoadJson.addEventListener("click", async () => {
         if (window.go && window.go.main && window.go.main.App) {
@@ -189,6 +255,7 @@ if (btnLoadJson) {
                 if (!exam) return;
                 state.fullExamSource = JSON.parse(JSON.stringify(exam));
                 btnStartExam60.style.display = "inline-block";
+                btnExportJson.style.display = "inline-block";
                 modeSwitchWrapper.style.display = "inline-block";
                 setupExamSession(exam, `${exam.exam_title} (${t("fullBaseTitle")})`, false);
             } catch (err) {
@@ -210,6 +277,7 @@ if (mobileFileInput) {
                 const exam = JSON.parse(event.target.result);
                 state.fullExamSource = JSON.parse(JSON.stringify(exam));
                 btnStartExam60.style.display = "inline-block";
+                btnExportJson.style.display = "inline-block";
                 modeSwitchWrapper.style.display = "inline-block";
                 setupExamSession(exam, `${exam.exam_title || file.name} (${t("fullBaseTitle")})`, false);
             } catch (err) {
@@ -217,6 +285,21 @@ if (mobileFileInput) {
             }
         };
         reader.readAsText(file);
+    });
+}
+
+// Экспорт базы в файл JSON
+if (btnExportJson) {
+    btnExportJson.addEventListener("click", () => {
+        if (!state.currentExam) return;
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state.currentExam, null, 2));
+        const downloadAnchor = document.createElement("a");
+        const safeTitle = (state.currentExam.exam_title || "exam_dump").replace(/[^a-zA-Z0-9_\-]/g, "_");
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `${safeTitle}_exported.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
     });
 }
 
@@ -392,6 +475,15 @@ function renderQuestion() {
 
     qText.innerText = q.question_text;
 
+    // Загрузка заметки к вопросу
+    const curNote = getQuestionNote(q.number);
+    noteTextarea.value = curNote;
+    if (curNote) {
+        btnToggleNote.classList.add("has-note-badge");
+    } else {
+        btnToggleNote.classList.remove("has-note-badge");
+    }
+
     imagesContainer.innerHTML = "";
     if (q.images && q.images.length > 0) {
         imagesContainer.style.display = "flex";
@@ -411,12 +503,12 @@ function renderQuestion() {
                 delBtn.style.position = "absolute";
                 delBtn.style.top = "10px";
                 delBtn.style.right = "10px";
-                delBtn.style.background = "#f38ba8";
-                delBtn.style.color = "#11111b";
+                delBtn.style.background = "#f43f5e";
+                delBtn.style.color = "#ffffff";
                 delBtn.style.border = "none";
                 delBtn.style.borderRadius = "50%";
-                delBtn.style.width = "22px";
-                delBtn.style.height = "22px";
+                delBtn.style.width = "24px";
+                delBtn.style.height = "24px";
                 delBtn.style.cursor = "pointer";
                 delBtn.style.fontWeight = "bold";
                 delBtn.onclick = async (e) => {
@@ -540,14 +632,13 @@ function selectOption(key, isMultiple, expectedCount) {
             state.userAnswers[q.number].push(key);
         }
     }
-    // Сохраняем немедленно при выборе любого ответа
     saveActiveSession(examTitle.innerText);
     renderQuestion();
 }
 
 // Горячие клавиши
 window.addEventListener("keydown", (e) => {
-    if (e.target.tagName === "INPUT" && e.target.type === "text") return;
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
     if (!state.currentExam || !state.currentExam.questions.length) return;
 
     const q = state.currentExam.questions[state.currentIndex];
@@ -728,6 +819,24 @@ async function submitAndShowReport() {
     btnShowAns.style.display = "inline-block";
     updateGridStyles({ answeredStatElement: answeredStat });
     renderQuestion();
+}
+
+// Экспорт отчета в новой вкладке для печати или сохранения в PDF
+if (modalBtnExportReport) {
+    modalBtnExportReport.addEventListener("click", () => {
+        if (!state.examResultData || !state.currentExam) return;
+        const html = generateExamReportHTML({
+            examTitle: examTitle.innerText,
+            resultData: state.examResultData,
+            questions: state.currentExam.questions,
+            userAnswers: state.userAnswers
+        });
+        const reportWindow = window.open("", "_blank");
+        if (reportWindow) {
+            reportWindow.document.write(html);
+            reportWindow.document.close();
+        }
+    });
 }
 
 btnHistory.addEventListener("click", () => {

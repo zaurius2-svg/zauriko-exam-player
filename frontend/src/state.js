@@ -2,6 +2,7 @@
 
 export const STORAGE_SESSION_KEY = "zauriko_exam_active_session";
 export const STORAGE_HISTORY_KEY = "zauriko_exam_history_logs";
+export const STORAGE_NOTES_KEY = "zauriko_exam_user_notes";
 
 export const state = {
     fullExamSource: null,
@@ -9,6 +10,10 @@ export const state = {
     currentIndex: 0,
     userAnswers: {},
     markedQuestions: new Set(),
+    userNotes: {}, // { [questionNumber]: string }
+
+    searchQuery: "",
+    activeFilter: "all", // "all", "unanswered", "marked", "images", "notes"
 
     timerInterval: null,
     remainingSeconds: 0,
@@ -17,6 +22,33 @@ export const state = {
     isPracticeMode: false,
     examResultData: null
 };
+
+export function loadUserNotes() {
+    try {
+        state.userNotes = JSON.parse(localStorage.getItem(STORAGE_NOTES_KEY) || "{}");
+    } catch (e) {
+        state.userNotes = {};
+    }
+}
+
+export function saveQuestionNote(qNumber, noteText) {
+    if (!state.userNotes) state.userNotes = {};
+    if (!noteText || !noteText.trim()) {
+        delete state.userNotes[qNumber];
+    } else {
+        state.userNotes[qNumber] = noteText.trim();
+    }
+    try {
+        localStorage.setItem(STORAGE_NOTES_KEY, JSON.stringify(state.userNotes));
+    } catch (e) {
+        console.error("Notes save error:", e);
+    }
+}
+
+export function getQuestionNote(qNumber) {
+    if (!state.userNotes) loadUserNotes();
+    return state.userNotes[qNumber] || "";
+}
 
 export function saveActiveSession(displayTitle) {
     if (!state.currentExam || state.isExamFinished) return;
@@ -57,7 +89,7 @@ export function saveHistoryEntry(entry) {
     try {
         let history = JSON.parse(localStorage.getItem(STORAGE_HISTORY_KEY) || "[]");
         history.unshift(entry);
-        if (history.length > 30) history = history.slice(0, 30);
+        if (history.length > 50) history = history.slice(0, 50);
         localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(history));
     } catch (e) {
         console.error("History save error:", e);

@@ -307,7 +307,7 @@ body {
 
 /* Сайдбар */
 .sidebar {
-    width: 290px;
+    width: 310px;
     background-color: var(--bg-mantle);
     border-right: 1px solid var(--border-glass);
     display: flex;
@@ -320,7 +320,64 @@ body {
 .sidebar-header {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
+}
+
+.sidebar-top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.search-box-wrapper {
+    width: 100%;
+}
+
+.search-input {
+    width: 100%;
+    background-color: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.search-input:focus {
+    border-color: var(--accent-light);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.filter-chip {
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 10px;
+    font-size: 0.74rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.filter-chip:hover {
+    color: var(--text-primary);
+    border-color: #4b557c;
+}
+
+.filter-chip.active {
+    background: var(--accent-light);
+    color: #ffffff;
+    border-color: var(--accent-light);
+    font-weight: 600;
 }
 
 .sidebar-header h3 {
@@ -399,6 +456,44 @@ body {
     border-color: var(--warning);
     color: #fbbf24;
     background: rgba(245, 158, 11, 0.1);
+}
+
+.grid-item.has-note {
+    position: relative;
+}
+
+.grid-item.has-note::after {
+    content: "•";
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    font-size: 14px;
+    color: var(--accent-light);
+}
+
+.btn-tool.has-note-badge {
+    border-color: var(--accent-light);
+    color: var(--accent-light);
+}
+
+.note-box {
+    background: rgba(26, 30, 48, 0.6);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.note-textarea {
+    width: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-family: inherit;
+    resize: vertical;
+    line-height: 1.45;
 }
 
 .grid-item.result-correct {

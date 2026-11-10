@@ -22,6 +22,7 @@
                 <input type="file" id="mobile-docx-input" accept=".docx" style="display: none;" />
                 <button id="btn-load-json" class="btn" data-i18n="openJson">Открыть JSON</button>
                 <input type="file" id="mobile-file-input" accept=".json" style="display: none;" />
+                <button id="btn-export-json" class="btn btn-tool" style="display: none;" data-i18n="exportJson">💾 Экспорт JSON</button>
                 <button id="btn-start-exam-60" class="btn btn-simulation" style="display: none;" data-i18n="sim60">🎯 Симуляция (60)</button>
                 <button id="btn-history" class="btn btn-tool" data-i18n="historyBtn">📊 История</button>
                 
@@ -49,12 +50,30 @@
         <div class="workspace">
             <aside class="sidebar" id="sidebar" style="display: none;">
                 <div class="sidebar-header">
-                    <h3 id="sidebar-heading" data-i18n="questionsList">Список вопросов</h3>
+                    <div class="sidebar-top-row">
+                        <h3 id="sidebar-heading" data-i18n="questionsList">Список вопросов</h3>
+                    </div>
+
+                    <!-- Поиск по вопросам -->
+                    <div class="search-box-wrapper">
+                        <input type="text" id="question-search-input" class="search-input" placeholder="Поиск вопроса / ключевых слов..." data-i18n-placeholder="searchPlaceholder" />
+                    </div>
+
+                    <!-- Быстрые фильтры -->
+                    <div class="filter-chips">
+                        <button class="filter-chip active" data-filter="all" data-i18n="filterAll">Все</button>
+                        <button class="filter-chip" data-filter="unanswered" data-i18n="filterUnanswered">Не отвеченные</button>
+                        <button class="filter-chip" data-filter="marked" data-i18n="filterMarked">Review</button>
+                        <button class="filter-chip" data-filter="images" data-i18n="filterHasImages">С картинками</button>
+                        <button class="filter-chip" data-filter="notes" data-i18n="filterHasNotes">С заметками</button>
+                    </div>
+
                     <div class="legend">
                         <span class="legend-item"><i class="dot dot-answered"></i> <span data-i18n="legendAnswered">Отвечен</span></span>
                         <span class="legend-item"><i class="dot dot-marked"></i> Review</span>
                     </div>
                 </div>
+
                 <div class="question-grid" id="question-grid"></div>
                 <div class="hotkey-hint" id="hotkey-hint"></div>
             </aside>
@@ -67,9 +86,15 @@
                         <span id="q-mode-badge" class="badge-mode" style="display: none;">SIMULATION</span>
                     </div>
                     <div class="meta-right">
-                        <button id="btn-add-image" class="btn btn-tool" data-i18n="addImage">📷 Добавить картинку</button>
+                        <button id="btn-toggle-note" class="btn btn-tool" data-i18n="btnNote">📝 Заметка</button>
+                        <button id="btn-add-image" class="btn btn-tool" data-i18n="addImage">📷 Картинка</button>
                         <button id="btn-mark-review" class="btn btn-review">★ Review</button>
                     </div>
+                </div>
+
+                <!-- Блок заметки пользователя к вопросу -->
+                <div id="note-box" class="note-box" style="display: none;">
+                    <textarea id="note-textarea" class="note-textarea" rows="3" placeholder="Ваша персональная заметка к этому вопросу..." data-i18n-placeholder="notePlaceholder"></textarea>
                 </div>
 
                 <div id="q-text" class="question-text"></div>
@@ -98,6 +123,7 @@
 
                 <div class="modal-actions">
                     <button id="modal-btn-retry-mistakes" class="btn btn-mistakes" style="display: none;" data-i18n="retryMistakes">🔥 Тренировка по ошибкам</button>
+                    <button id="modal-btn-export-report" class="btn btn-tool" data-i18n="btnExportReport">📄 Экспорт отчета</button>
                     <button id="modal-btn-review-errors" class="btn btn-secondary" data-i18n="reviewErrors">Обзор ошибок</button>
                     <button id="modal-btn-close" class="btn btn-primary" data-i18n="btnClose">Закрыть</button>
                 </div>
