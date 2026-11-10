@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8"/>
+    <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+    <title>Zauriko Exam Simulator</title>
+    <link rel="stylesheet" href="./src/style.css"/>
+</head>
+<body>
+    <div id="app">
+        <!-- Шапка -->
+        <header class="header">
+            <div class="header-left">
+                <select id="select-lang" class="lang-select" title="Language">
+                    <option value="ru">Русский</option>
+                    <option value="en">English</option>
+                    <option value="az">Azərbaycan</option>
+                    <option value="uk">Українська</option>
+                </select>
+
+                <button id="btn-import-docx" class="btn btn-primary" data-i18n="importDocx">Импорт DOCX</button>
+                <input type="file" id="mobile-docx-input" accept=".docx" style="display: none;" />
+                <button id="btn-load-json" class="btn" data-i18n="openJson">Открыть JSON</button>
+                <input type="file" id="mobile-file-input" accept=".json" style="display: none;" />
+                <button id="btn-start-exam-60" class="btn btn-simulation" style="display: none;" data-i18n="sim60">🎯 Симуляция (60)</button>
+                <button id="btn-history" class="btn btn-tool" data-i18n="historyBtn">📊 История</button>
+                
+                <div class="mode-switch-wrapper" id="mode-switch-wrapper" style="display: none;">
+                    <label class="switch-label">
+                        <input type="checkbox" id="chk-practice-mode"/>
+                        <span class="switch-text" data-i18n="practiceMode">Practice Mode</span>
+                    </label>
+                </div>
+
+                <span id="exam-title" class="title" data-i18n="fileNotSelected">Файл не выбран</span>
+            </div>
+            <div class="header-right">
+                <div id="timer-wrapper" class="timer-wrapper" style="display: none;">
+                    <span class="timer-label" data-i18n="timerLeft">Осталось:</span>
+                    <span id="timer-display" class="timer-display">00:00:00</span>
+                </div>
+                <button id="btn-toggle-sidebar" class="btn btn-icon" title="Сетка вопросов" style="display: none;">
+                    ☰ <span data-i18n="questionsList">Вопросы</span> (<span id="answered-stat">0</span>/<span id="total-stat">0</span>)
+                </button>
+            </div>
+        </header>
+
+        <!-- Рабочая область -->
+        <div class="workspace">
+            <aside class="sidebar" id="sidebar" style="display: none;">
+                <div class="sidebar-header">
+                    <h3 id="sidebar-heading" data-i18n="questionsList">Список вопросов</h3>
+                    <div class="legend">
+                        <span class="legend-item"><i class="dot dot-answered"></i> <span data-i18n="legendAnswered">Отвечен</span></span>
+                        <span class="legend-item"><i class="dot dot-marked"></i> Review</span>
+                    </div>
+                </div>
+                <div class="question-grid" id="question-grid"></div>
+                <div class="hotkey-hint" id="hotkey-hint"></div>
+            </aside>
+
+            <main class="main-content" id="quiz-area" style="display: none;">
+                <div class="meta-row">
+                    <div class="meta-left">
+                        <span id="q-counter" class="badge">Вопрос 1 / 1</span>
+                        <span id="q-type" class="badge-type">Multiple Choice</span>
+                        <span id="q-mode-badge" class="badge-mode" style="display: none;">SIMULATION</span>
+                    </div>
+                    <div class="meta-right">
+                        <button id="btn-add-image" class="btn btn-tool" data-i18n="addImage">📷 Добавить картинку</button>
+                        <button id="btn-mark-review" class="btn btn-review">★ Review</button>
+                    </div>
+                </div>
+
+                <div id="q-text" class="question-text"></div>
+                <div id="images-container" class="images-container" style="display: none;"></div>
+                <div id="options-container" class="options-list"></div>
+                <div id="explanation-box" class="explanation" style="display: none;"></div>
+            </main>
+        </div>
+
+        <!-- Нижняя панель управления -->
+        <footer class="footer" id="footer-controls" style="display: none;">
+            <button id="btn-prev" class="btn" data-i18n="btnPrev">Назад (←)</button>
+            <button id="btn-show-ans" class="btn btn-secondary" data-i18n="btnShowAns">Показать ответ (Space)</button>
+            <button id="btn-next" class="btn" data-i18n="btnNext">Вперед (→)</button>
+            <button id="btn-submit" class="btn btn-finish" data-i18n="btnSubmit">Завершить экзамен</button>
+        </footer>
+
+        <!-- Модальное окно результатов -->
+        <div id="result-modal" class="modal-overlay" style="display: none;">
+            <div class="modal-card">
+                <h2 id="modal-status-title" class="status-pass">PASS</h2>
+                <div class="score-circle">
+                    <span id="modal-score-pct">0%</span>
+                </div>
+                <p id="modal-score-details" class="score-details"></p>
+
+                <div class="modal-actions">
+                    <button id="modal-btn-retry-mistakes" class="btn btn-mistakes" style="display: none;" data-i18n="retryMistakes">🔥 Тренировка по ошибкам</button>
+                    <button id="modal-btn-review-errors" class="btn btn-secondary" data-i18n="reviewErrors">Обзор ошибок</button>
+                    <button id="modal-btn-close" class="btn btn-primary" data-i18n="btnClose">Закрыть</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Модальное окно истории -->
+        <div id="history-modal" class="modal-overlay" style="display: none;">
+            <div class="modal-card modal-large">
+                <h2 data-i18n="historyTitle">История экзаменационных попыток</h2>
+                <div id="history-table-container" class="history-table-container"></div>
+                <div class="modal-actions">
+                    <button id="btn-clear-history" class="btn btn-finish" data-i18n="clearHistory">Очистить историю</button>
+                    <button id="btn-close-history" class="btn btn-primary" data-i18n="btnClose">Закрыть</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>

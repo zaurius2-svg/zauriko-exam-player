@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Zauriko Exam Simulator</string>
+    <string name="title_activity_main">Zauriko Exam Simulator</string>
+    <string name="package_name">com.zauriko.examsim</string>
+    <string name="custom_url_scheme">com.zauriko.examsim</string>
+</resources>
